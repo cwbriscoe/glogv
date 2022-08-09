@@ -2,8 +2,6 @@
 
 glogv is a zerolog log viewer.  It converts zerologs standard json tags (time, level, message and error) and makes them more readable in the console.  The output is color coded depending on the log level of the message.
 
-glogv does not suport the custom json that is created when using the .Str(k string, v string) method of zerolog.  It would be pretty easy to add your logs custom json if you wanted to fork the repo.
-
 Installation:
 
 ```bash
