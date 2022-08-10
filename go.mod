@@ -1,5 +1,5 @@
 module github.com/cwbriscoe/glogv
 
-go 1.16
+go 1.18
 
 require github.com/goccy/go-json v0.9.10
