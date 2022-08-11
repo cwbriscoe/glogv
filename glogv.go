@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	maxKeys       = 100 // maximum size json key slice.
-	errorExitCode = 4   // exit code if error occurs.
+	bufSize       = 1 * 1024 * 1024 // read buffer size to use.
+	maxKeys       = 100             // maximum size json key slice.
+	errorExitCode = 4               // exit code if error occurs.
 )
 
 // ANSI color escape codes
@@ -37,8 +38,14 @@ type keyValues struct {
 var keys = make([]string, 0, maxKeys)
 
 func main() {
-	// create a stdin scanner and loop until all log lines are processed.
+	// create a larger than the default buffer size of 64k.
+	buf := make([]byte, 0, bufSize)
+
+	// create a stdin scanner with the custom buffer.
 	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(buf, bufSize)
+
+	// loop until EOF.
 	for scanner.Scan() {
 		reformat(scanner.Bytes())
 	}
