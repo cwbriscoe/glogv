@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/goccy/go-json"
+	"github.com/klauspost/compress/gzip"
 )
 
 const (
@@ -32,6 +34,24 @@ var (
 	colorWhite  = "\033[37m"
 )
 
+// default colors by level.
+var color = map[string]string{
+	"info":  colorGreen,
+	"warn":  colorYellow,
+	"debug": colorCyan,
+	"error": colorRed,
+	"panic": colorPurple,
+	"fatal": colorPurple,
+	"trace": colorCyan,
+}
+
+// other default colors.
+var (
+	timeColor = colorGray
+	tagColor  = colorGray
+	infoColor = colorWhite
+)
+
 // this struct will be used to marshall the json file into key/values.
 type keyValues struct {
 	Map map[string]any `json:"-"`
@@ -44,17 +64,17 @@ func main() {
 	// parse flags
 	tailFile := flag.Bool("tail", false, "tail the file provided")
 	flag.Parse()
-	file := flag.Arg(0)
+	files := flag.Args()
 
 	// make sure there is a file provided if the -tail option is set
-	if *tailFile && file == "" {
+	if *tailFile && len(files) == 0 {
 		fmt.Printf("-tail option used without a file being provided\n")
 		os.Exit(errorExitCode)
 	}
 
 	// check for tail mode if flag set.
 	if *tailFile {
-		if err := tail(file); err != nil {
+		if err := tail(files); err != nil {
 			fmt.Printf("error: %v\n", err)
 			os.Exit(errorExitCode)
 		}
@@ -62,8 +82,8 @@ func main() {
 	}
 
 	// check for cat mode if not tail mode and file provided.
-	if file != "" {
-		if err := cat(file); err != nil {
+	if len(files) > 0 {
+		if err := cat(files); err != nil {
 			fmt.Printf("error: %v\n", err)
 			os.Exit(errorExitCode)
 		}
@@ -90,13 +110,18 @@ func scan() error {
 }
 
 // tail will run the linux tail command and log the output
-func tail(file string) error {
-	// check if file exists first
-	if _, err := os.Stat(file); err != nil {
-		return err
+func tail(files []string) error {
+	// check if file(s) exists first
+	for _, file := range files {
+		if _, err := os.Stat(file); err != nil {
+			return err
+		}
 	}
 
-	cmd := exec.CommandContext(context.Background(), "tail", "--follow=name", file)
+	args := []string{"--follow=name"}
+	args = append(args, files...)
+
+	cmd := exec.CommandContext(context.Background(), "tail", args...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -118,31 +143,52 @@ func tail(file string) error {
 		return err
 	}
 
-	wg.Wait()
-
 	if err := scanner.Err(); err != nil {
 		return err
 	}
 
+	wg.Wait()
+
 	return cmd.Wait()
 }
 
-// cat will read the given file and reformat it
-func cat(file string) error {
-	read, err := os.Open(file)
-	if err != nil {
-		return err
+// cat will read the given file(s) and reformat it
+func cat(files []string) error {
+	fn := func(file string) error {
+		read, err := os.Open(file)
+		if err != nil {
+			return err
+		}
+		defer read.Close()
+
+		// pick a reader based on if the file is compressed or not.
+		var scanner *bufio.Scanner
+		if filepath.Ext(file) == ".gz" {
+			gz, err := gzip.NewReader(read)
+			if err != nil {
+				return err
+			}
+			defer gz.Close()
+			scanner = bufio.NewScanner(gz)
+		} else {
+			scanner = bufio.NewScanner(read)
+		}
+
+		// loop until EOF.
+		for scanner.Scan() {
+			reformat(scanner.Bytes())
+		}
+
+		return scanner.Err()
 	}
-	defer read.Close()
 
-	scanner := bufio.NewScanner(read)
-
-	// loop until EOF.
-	for scanner.Scan() {
-		reformat(scanner.Bytes())
+	for _, file := range files {
+		if err := fn(file); err != nil {
+			return err
+		}
 	}
 
-	return scanner.Err()
+	return nil
 }
 
 // reformats the json log line into a prettier, more readable version.
@@ -187,8 +233,13 @@ func reformat(b []byte) {
 	delete(keyVals.Map, "message")
 	delete(keyVals.Map, "error")
 
+	// if level is unknown, set it to default
+	if _, ok := color[level]; !ok {
+		level = "info"
+	}
+
 	// now, parse through the remaining key/values in the map.
-	valStr := formatMap(keyVals.Map)
+	valStr := formatMap(keyVals.Map, level)
 
 	// finally, print the prettier log entry.
 	fmt.Printf("%s%s%s%s%s\n", tmStr, lvlStr, msgStr, errStr, valStr)
@@ -199,27 +250,31 @@ func formatTime(t time.Time) string {
 	s := t.Format(time.Kitchen)
 
 	if len(s) == 6 {
-		return colorGray + "0" + s
+		return timeColor + "0" + s
 	}
 
-	return colorGray + s
+	return timeColor + s
 }
 
 // formats the 'level' portion of the json log line.
 func formatLevel(s string) string {
 	switch s {
 	case "info":
-		return " " + colorGreen + "INF"
+		return " " + color[s] + "INF"
 	case "warn":
-		return " " + colorYellow + "WRN"
+		return " " + color[s] + "WRN"
 	case "debug":
-		return " " + colorCyan + "DBG"
+		return " " + color[s] + "DBG"
 	case "error":
-		return " " + colorRed + "ERR"
+		return " " + color[s] + "ERR"
 	case "panic":
-		return " " + colorPurple + "PNC"
+		return " " + color[s] + "PNC"
+	case "fatal":
+		return " " + color[s] + "PNC"
+	case "trace":
+		return " " + color[s] + "PNC"
 	default:
-		return " ???"
+		return color["info"] + " ???"
 	}
 }
 
@@ -230,7 +285,7 @@ func formatMessage(s string, l string) string {
 	}
 
 	if l == "info" {
-		return " " + colorWhite + s
+		return " " + infoColor + s
 	}
 
 	return " " + s
@@ -246,17 +301,25 @@ func formatError(s string) string {
 }
 
 // formats the remaining key/value pairs of the json log line.
-func formatMap(m map[string]any) string {
-	l := len(m)
+func formatMap(m map[string]any, l string) string {
+	length := len(m)
 	// if the map is empty then return nothing.
-	if l == 0 {
+	if length == 0 {
 		return ""
 	}
 
+	// compute value color
+	var clr string
+	if l == "info" {
+		clr = infoColor
+	} else {
+		clr = color[l]
+	}
+
 	// if there is just one value left in the map, return it now.
-	if l == 1 {
+	if length == 1 {
 		for k, v := range m {
-			return " " + colorGray + k + "=" + colorReset + v.(string)
+			return " " + tagColor + k + "=" + clr + v.(string)
 		}
 	}
 
@@ -276,7 +339,7 @@ func formatMap(m map[string]any) string {
 
 	var s string
 	for _, k := range keys {
-		s += " " + colorGray + k + "=" + colorReset + m[k].(string)
+		s += " " + tagColor + k + "=" + clr + m[k].(string)
 	}
 
 	return s
