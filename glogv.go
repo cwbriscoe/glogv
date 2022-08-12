@@ -230,7 +230,7 @@ func formatMessage(s string, l string) string {
 	}
 
 	if l == "info" {
-		return " " + colorReset + s
+		return " " + colorWhite + s
 	}
 
 	return " " + s
