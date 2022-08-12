@@ -11,8 +11,8 @@ go install github.com/cwbriscoe/glogv@latest
 Usage:
 
 ```bash
-# make sure your GOPATH/bin is in your path
-tail -f /path/to/file.log | glogv
+# make sure your $GOPATH/bin is in your path
+tail --follow=name /path/to/file.log | glogv
 # or
 cat /path/to/file.log | glogv
 # etc
@@ -22,7 +22,7 @@ Here are a couple of useful bash function shortcuts:
 
 ```bash
 tl() {
-  tail -f $1 | glogv
+  tail --follow=name $1 | glogv
 }
 
 cl() {

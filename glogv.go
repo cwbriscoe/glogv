@@ -2,18 +2,21 @@ package main
 
 import (
 	"bufio"
+	"context"
+	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/goccy/go-json"
 )
 
 const (
-	bufSize       = 1 * 1024 * 1024 // read buffer size to use.
-	maxKeys       = 100             // maximum size json key slice.
-	errorExitCode = 4               // exit code if error occurs.
+	maxKeys       = 100 // maximum size of json key slice.
+	errorExitCode = 4   // exit code if an error occurs.
 )
 
 // ANSI color escape codes
@@ -38,22 +41,108 @@ type keyValues struct {
 var keys = make([]string, 0, maxKeys)
 
 func main() {
-	// create a larger than the default buffer size of 64k.
-	buf := make([]byte, 0, bufSize)
+	// parse flags
+	tailFile := flag.Bool("tail", false, "tail the file provided")
+	flag.Parse()
+	file := flag.Arg(0)
 
-	// create a stdin scanner with the custom buffer.
+	// make sure there is a file provided if the -tail option is set
+	if *tailFile && file == "" {
+		fmt.Printf("-tail option used without a file being provided\n")
+		os.Exit(errorExitCode)
+	}
+
+	// check for tail mode if flag set.
+	if *tailFile {
+		if err := tail(file); err != nil {
+			fmt.Printf("error: %v\n", err)
+			os.Exit(errorExitCode)
+		}
+		return
+	}
+
+	// check for cat mode if not tail mode and file provided.
+	if file != "" {
+		if err := cat(file); err != nil {
+			fmt.Printf("error: %v\n", err)
+			os.Exit(errorExitCode)
+		}
+		return
+	}
+
+	// otherwise, scan stdin.
+	if err := scan(); err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(errorExitCode)
+	}
+}
+
+// scan continues to scan stdin until EOF.
+func scan() error {
 	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Buffer(buf, bufSize)
 
 	// loop until EOF.
 	for scanner.Scan() {
 		reformat(scanner.Bytes())
 	}
 
-	if err := scanner.Err(); err != nil {
-		fmt.Printf("scanner error: %v\n", err)
-		os.Exit(errorExitCode)
+	return scanner.Err()
+}
+
+// tail will run the linux tail command and log the output
+func tail(file string) error {
+	// check if file exists first
+	if _, err := os.Stat(file); err != nil {
+		return err
 	}
+
+	cmd := exec.CommandContext(context.Background(), "tail", "--follow=name", file)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	scanner := bufio.NewScanner(stdout)
+	go func() {
+		for scanner.Scan() {
+			reformat(scanner.Bytes())
+		}
+		wg.Done()
+	}()
+
+	if err = cmd.Start(); err != nil {
+		return err
+	}
+
+	wg.Wait()
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	return cmd.Wait()
+}
+
+// cat will read the given file and reformat it
+func cat(file string) error {
+	read, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer read.Close()
+
+	scanner := bufio.NewScanner(read)
+
+	// loop until EOF.
+	for scanner.Scan() {
+		reformat(scanner.Bytes())
+	}
+
+	return scanner.Err()
 }
 
 // reformats the json log line into a prettier, more readable version.
