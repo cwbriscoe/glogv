@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,6 +52,8 @@ var (
 	tagColor  = colorGray
 	infoColor = colorWhite
 )
+
+var timeFormat = "03:04PM"
 
 // this struct will be used to marshall the json file into key/values.
 type keyValues struct {
@@ -194,7 +197,7 @@ func cat(files []string) error {
 // reformats the json log line into a prettier, more readable version.
 func reformat(b []byte) {
 	var tm time.Time
-	var level, message, errorx string
+	var level, message string
 
 	// first make sure the log line is json, if not return without processing.
 	if string(b[:1]) != "{" {
@@ -217,21 +220,16 @@ func reformat(b []byte) {
 	if val, ok := keyVals.Map["message"]; ok {
 		message = val.(string)
 	}
-	if val, ok := keyVals.Map["error"]; ok {
-		errorx = val.(string)
-	}
 
 	// reformat what we have parsed so far.
 	tmStr := formatTime(tm)
 	lvlStr := formatLevel(level)
 	msgStr := formatMessage(message, level)
-	errStr := formatError(errorx)
 
 	// next delete the keys we just processed from the map.
 	delete(keyVals.Map, "time")
 	delete(keyVals.Map, "level")
 	delete(keyVals.Map, "message")
-	delete(keyVals.Map, "error")
 
 	// if level is unknown, set it to default
 	if _, ok := color[level]; !ok {
@@ -242,23 +240,17 @@ func reformat(b []byte) {
 	valStr := formatMap(keyVals.Map, level)
 
 	// finally, print the prettier log entry.
-	fmt.Printf("%s%s%s%s%s\n", tmStr, lvlStr, msgStr, errStr, valStr)
+	fmt.Printf("%s%s%s%s\n", tmStr, lvlStr, msgStr, valStr)
 }
 
 // formats the 'time' portion of the json log line.
 func formatTime(t time.Time) string {
-	s := t.Format(time.Kitchen)
-
-	if len(s) == 6 {
-		return timeColor + "0" + s
-	}
-
-	return timeColor + s
+	return timeColor + t.Format(timeFormat)
 }
 
 // formats the 'level' portion of the json log line.
 func formatLevel(s string) string {
-	switch s {
+	switch strings.ToLower(s) {
 	case "info":
 		return " " + color[s] + "INF"
 	case "warn":
@@ -289,15 +281,6 @@ func formatMessage(s string, l string) string {
 	}
 
 	return " " + s
-}
-
-// formats the 'error' portion of the json log line.
-func formatError(s string) string {
-	if s == "" {
-		return s
-	}
-
-	return " (error: " + s + ")"
 }
 
 // formats the remaining key/value pairs of the json log line.
@@ -339,7 +322,11 @@ func formatMap(m map[string]any, l string) string {
 
 	var s string
 	for _, k := range keys {
-		s += " " + tagColor + k + "=" + clr + m[k].(string)
+		if strings.ToLower(k) == "error" {
+			s += " " + tagColor + k + "=" + color["error"] + m[k].(string)
+		} else {
+			s += " " + tagColor + k + "=" + clr + m[k].(string)
+		}
 	}
 
 	return s
