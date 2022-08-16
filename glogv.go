@@ -215,10 +215,15 @@ func reformat(b []byte) {
 		tm, _ = time.Parse(time.RFC3339, val.(string))
 	}
 	if val, ok := keyVals.Map["level"]; ok {
-		level = val.(string)
+		level = strings.ToLower(val.(string))
 	}
 	if val, ok := keyVals.Map["message"]; ok {
 		message = val.(string)
+	}
+
+	// if level is unknown, set it to default
+	if _, ok := color[level]; !ok {
+		level = "info"
 	}
 
 	// reformat what we have parsed so far.
@@ -231,16 +236,21 @@ func reformat(b []byte) {
 	delete(keyVals.Map, "level")
 	delete(keyVals.Map, "message")
 
-	// if level is unknown, set it to default
-	if _, ok := color[level]; !ok {
-		level = "info"
-	}
-
 	// now, parse through the remaining key/values in the map.
 	valStr := formatMap(keyVals.Map, level)
 
 	// finally, print the prettier log entry.
 	fmt.Printf("%s%s%s%s\n", tmStr, lvlStr, msgStr, valStr)
+}
+
+func getColor(l string) string {
+	var clr string
+	if l == "info" {
+		clr = infoColor
+	} else {
+		clr = color[l]
+	}
+	return clr
 }
 
 // formats the 'time' portion of the json log line.
@@ -250,7 +260,7 @@ func formatTime(t time.Time) string {
 
 // formats the 'level' portion of the json log line.
 func formatLevel(s string) string {
-	switch strings.ToLower(s) {
+	switch s {
 	case "info":
 		return " " + color[s] + "INF"
 	case "warn":
@@ -276,11 +286,7 @@ func formatMessage(s string, l string) string {
 		return s
 	}
 
-	if l == "info" {
-		return " " + infoColor + s
-	}
-
-	return " " + s
+	return " " + getColor(l) + s
 }
 
 // formats the remaining key/value pairs of the json log line.
@@ -292,12 +298,7 @@ func formatMap(m map[string]any, l string) string {
 	}
 
 	// compute value color
-	var clr string
-	if l == "info" {
-		clr = infoColor
-	} else {
-		clr = color[l]
-	}
+	clr := getColor(l)
 
 	// if there is just one value left in the map, return it now.
 	if length == 1 {
