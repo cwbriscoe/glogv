@@ -15,7 +15,7 @@ go install github.com/cwbriscoe/glogv@latest
 ### **Basic Usage:**
 
 ```bash
-# this willl 'cat' the file and display it in the console
+# this will 'cat' the file and display it in the console
 glogv /path/to/file.log
 
 # this will 'tail' the file
@@ -27,7 +27,7 @@ glogv -tail /path/to/file.log | grep -e ERR -e WRN --color=never -a
 glogv -tail /path/to/file.log | awk 'match($2,/WRN|ERR/)'
 ```
 
-### **Also works will rolled log files:**
+### **Also works with rolled log files:**
 
 ```bash
 glogv /path/to/file.log.gz

@@ -326,7 +326,7 @@ func formatMap(m map[string]any, l string) string {
 		if strings.ToLower(k) == "error" {
 			s += " " + tagColor + k + "=" + color["error"] + m[k].(string)
 		} else {
-			s += " " + tagColor + k + "=" + clr + m[k].(string)
+			s += " " + tagColor + k + "=" + clr + fmt.Sprint(m[k])
 		}
 	}
 
