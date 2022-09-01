@@ -206,7 +206,7 @@ func reformat(b []byte) {
 
 	// marshall the current log entry into a key/value map.
 	keyVals := &keyValues{}
-	if err := json.Unmarshal(b, &keyVals.Map); err != nil {
+	if err := json.UnmarshalNoEscape(b, &keyVals.Map); err != nil {
 		return
 	}
 
