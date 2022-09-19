@@ -60,12 +60,18 @@ type keyValues struct {
 	Map map[string]any `json:"-"`
 }
 
-// this string slice will store keys and then sort them.
+// this string slice will store keys that will be sorted before display.
 var keys = make([]string, 0, maxKeys)
+
+// cmdline options.
+var tailFile = flag.Bool("tail", false, "tail the file(s) provided")
+
+func init() {
+	flag.BoolVar(tailFile, "t", false, "")
+}
 
 func main() {
 	// parse flags
-	tailFile := flag.Bool("tail", false, "tail the file provided")
 	flag.Parse()
 	files := flag.Args()
 
