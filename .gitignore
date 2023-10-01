@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+glogv
 
 # Test binary, built with `go test -c`
 *.test
